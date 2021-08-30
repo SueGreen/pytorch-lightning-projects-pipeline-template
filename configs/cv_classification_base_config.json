@@ -1,0 +1,18 @@
+{ "model": {
+  "task": "classification",
+  "arch": "base"
+},
+  "data_params": {
+    "data_dir": "data/classification_cv_data_tiny",
+    "img_dim": [3, 28, 28],
+    "batch_size": 4
+  },
+  "train_params": {
+    "random_seed": 42,
+    "gpus": [0],
+    "max_epochs": 2,
+    "limit_train_batches": 5,
+    "limit_val_batches": 2,
+    "log_every_n_steps": 2
+  }
+}
