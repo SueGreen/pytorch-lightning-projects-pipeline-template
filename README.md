@@ -1,7 +1,19 @@
 # Pytorch-lightning-projects-pipeline
 
+## Information about the repository and code
+Available tasks:
+1. Computer Vision
+   1. Image classification
+
+## Running tasks
+### Clone the repository
+```angular2html
+git clone https://github.com/SueGreen/pytorch-lightning-projects-pipeline-template.git
+cd pytorch-lightning-projects-pipeline-template
+```
+
 ### Data
-For training on custom dataset, put images in folders with the following structure:
+For training an image classification model on a custom dataset, put images in folders with the following structure:
 ```angular2html
 pytorch-lightning-project-pipeline
 └───data
@@ -28,9 +40,15 @@ pytorch-lightning-project-pipeline
     │   │   │   ...
 ```
 
-### Running
+You can optionally modify a configuration file and then run a task with the following command:
 ```angular2html
-git clone https://github.com/SueGreen/pytorch-lightning-projects-pipeline-template.git
-cd pytorch-lightning-projects-pipeline-template
+python train.py -c "path/to/config/file"
+```
+
+
+For example, to run a computer vision classification base task, optionally modify "configs/cv_classification_base_config.json" file 
+and then specify the path to it:
+```angular2html
 python train.py -c "configs/cv_classification_base_config.json"
 ```
+
