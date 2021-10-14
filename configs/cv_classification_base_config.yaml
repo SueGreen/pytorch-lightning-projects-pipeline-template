@@ -1,0 +1,19 @@
+"task":
+  "domain": "cv"
+  "task": "classification"
+"model":
+  "name": "cv_classification_base"
+  "arch": "base"
+"data_params":
+  "data_dir": "data/classification_cv_data_tiny"
+  "dataframe_filename": "data.csv"
+  "images_dir": "images"
+  "img_dim": [3, 128, 128]
+  "batch_size": 4
+"train_params":
+  "random_seed": 42
+  "gpus": [0]
+  "max_epochs": 10
+  "limit_train_batches": 5
+  "limit_val_batches": 2
+  "log_every_n_steps": 2

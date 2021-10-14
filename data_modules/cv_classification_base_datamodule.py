@@ -1,47 +1,28 @@
-import pytorch_lightning as pl
-import torch
-from torch import nn
-from torch.nn import functional as F
-import argparse
-import json
-import os
-from pathlib import Path
-import numpy as np
-import math
-import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.datasets import MNIST
-from sklearn.datasets import load_breast_cancer
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, random_split
-# from torchvision.data import MNIST
-import os
-from torchvision import datasets, transforms
-import torchvision.models as models
 import copy
-import glob
-import random
+from pathlib import Path
 
 import albumentations as A
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import pytorch_lightning as pl
 from albumentations.pytorch import ToTensorV2
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
+
 from datasets.computer_vision.cv_classification_base_dataset import ComputerVisionCLassificationBaseDataset
 
+
 class BaseComputerVisionClassificationDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir, batch_size=4, train_val_ratio=0.8,
+    def __init__(self, data_dir, dataframe_filename, images_dir, batch_size=4, train_val_ratio=0.8,
                  img_dim=(3, 256, 256), num_classes=None):
         super().__init__()
         self.batch_size = batch_size
-        self.data_dir = data_dir
+        self.data_dir = Path(data_dir)
+        self.dataframe_path = Path(data_dir) / dataframe_filename
+        self.images_path = self.data_dir / images_dir
         self.train_val_ratio = train_val_ratio
-        # todo: handle different-size input images with a better approach.
-        #  some ideas present here: https://ai.stackexchange.com/a/14364
-        self.img_dim = img_dim # channels, height, width
+        self.img_dim = img_dim  # channels, height, width
         if num_classes:
             self.num_classes = num_classes
 
@@ -63,46 +44,34 @@ class BaseComputerVisionClassificationDataModule(pl.LightningDataModule):
         return flat_list
 
     def prepare_data(self):
-        train_data_path = os.path.join(self.data_dir, 'train')
-        test_data_path = os.path.join(self.data_dir, 'test')
+        self.data_csv = pd.read_csv(self.dataframe_path)
+        self.classes = self.data_csv['label'].unique()
 
-        # todo: redo with pandas dataframes
-        # todo: handle case when some classes are present only in test:
-        #  (make classes[] a union of what is present in train and test)
-        train_image_paths = []
-        classes = []
-        for data_path in glob.glob(train_data_path + '/*'):
-            classes.append(data_path.split('/')[-1])
-            train_image_paths.append(glob.glob(data_path + '/*'))
+        self.train_df, self.test_df = train_test_split(self.data_csv, test_size=0.2)
+        self.train_df, self.val_df = train_test_split(self.train_df, test_size=0.2)
 
-        train_image_paths = list(self.flatten_list(train_image_paths))
-        random.shuffle(train_image_paths)
-        self.train_image_paths = \
-            train_image_paths[:int(self.train_val_ratio * len(train_image_paths))]
-        self.valid_image_paths = \
-            train_image_paths[int(self.train_val_ratio * len(train_image_paths)):]
+        # print(f'Classes: {self.classes}')
+        self.num_classes = len(self.classes)
+        # print(f'Train size: {len(self.train_df)} '
+        #       f'\nVal size: {len(self.val_df)} '
+        #       f'\nTest size: {len(self.test_df)}')
 
-        test_image_paths = []
-        for data_path in glob.glob(test_data_path + '/*'):
-            test_image_paths.append(glob.glob(data_path + '/*'))
-        self.test_image_paths = list(self.flatten_list(test_image_paths))
-
-        print(f'classes: {classes}')
-        self.num_classes = len(classes)
-        print(f'Train size: {len(self.train_image_paths)} '
-              f'\nVal size: {len(self.valid_image_paths)} '
-              f'\nTest size: {len(self.test_image_paths)}')
-
-        self.idx2class = {i: j for i, j in enumerate(classes)}
+        # integer encoding
+        self.idx2class = {i: j for i, j in enumerate(self.classes)}
         self.class2idx = {value: key for key, value in self.idx2class.items()}
+        # print(f'Labels encoded: {self.class2idx}')
 
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
-            self.train_dataset = ComputerVisionCLassificationBaseDataset(self.train_image_paths, self.class2idx, self.train_transforms)
-            self.valid_dataset = ComputerVisionCLassificationBaseDataset(self.valid_image_paths, self.class2idx, self.test_transforms)
-            self.test_dataset = ComputerVisionCLassificationBaseDataset(self.test_image_paths, self.class2idx, self.test_transforms)
+            self.train_dataset = ComputerVisionCLassificationBaseDataset(self.images_path, self.train_df,
+                                                                         self.class2idx, self.train_transforms)
+            self.valid_dataset = ComputerVisionCLassificationBaseDataset(self.images_path, self.val_df, self.class2idx,
+                                                                         self.test_transforms)
+            self.test_dataset = ComputerVisionCLassificationBaseDataset(self.images_path, self.test_df, self.class2idx,
+                                                                        self.test_transforms)
         if stage == 'test' or stage == 'inference' or stage is None:
-            self.test_dataset = ComputerVisionCLassificationBaseDataset(self.test_image_paths, self.class2idx, self.test_transforms)
+            self.test_dataset = ComputerVisionCLassificationBaseDataset(self.images_path, self.test_df, self.class2idx,
+                                                                        self.test_transforms)
 
     def visualize_augmentations(self, dataset, idx=0, n_samples=10, cols=5, random_img=False):
         """
@@ -114,6 +83,7 @@ class BaseComputerVisionClassificationDataModule(pl.LightningDataModule):
         :param random_img: If True, display random augmented images.
                 If False, display different augmentations of the same image specified by the idx
         """
+        # todo: add possibility to run only on several images instead of the whole copy.deepcopy(dataset)
         dataset_for_display = copy.deepcopy(dataset)
         dataset_for_display.transform = A.Compose(
             [t for t in dataset.transform if not isinstance(t, (A.Normalize, ToTensorV2))])
@@ -130,8 +100,8 @@ class BaseComputerVisionClassificationDataModule(pl.LightningDataModule):
         plt.tight_layout(pad=1)
         plt.show()
 
-
-    def visualize_classification_results(self, predictions, dataset=None, init_idx=0, n_samples=10, cols=5, random_img=False):
+    def visualize_classification_results(self, predictions, dataset=None, init_idx=0, n_samples=10, cols=5,
+                                         random_img=False):
         """
         Function for visual check of results
         :param dataset: The dataset to be shown. Dataset has a predefined set of augmentations
@@ -141,6 +111,7 @@ class BaseComputerVisionClassificationDataModule(pl.LightningDataModule):
         :param random_img: If True, display random augmented images.
                 If False, display different augmentations of the same image specified by the idx
         """
+        # todo: add possibility to run only on several images instead of the whole copy.deepcopy(dataset)
         predictions = list(self.flatten_list(predictions))
         n_samples = min(n_samples, len(predictions))
         if dataset is None:
@@ -163,7 +134,6 @@ class BaseComputerVisionClassificationDataModule(pl.LightningDataModule):
             idx = init_idx + i
         plt.tight_layout(pad=1)
         plt.show()
-
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=4, shuffle=True)
